@@ -70,7 +70,7 @@ It is chosen as a deliberate empirical comparison, and because a shared trunk wi
 The contributions are: (i) a multi-head ANN with class-weighted loss, evaluated with 5-fold cross-validation and a held-out test set on cleaned data; (ii) a controlled comparison between items only (Experiment A) and items plus TIPI and demographics (Experiment B); (iii) a SHAP~\cite{shap} analysis aggregated per original variable and per variable group, with additivity and stability checks.
 
 \textbf{Group organization.}
-The project was carried out individually (the course allows groups of at most two). The author designed and implemented the whole pipeline (data cleaning and labelling, ANN training and evaluation, SHAP analysis, figures) in a Google Colab notebook, and wrote this paper.
+The project was carried out individually. The author designed and implemented the whole pipeline (data cleaning and labelling, ANN training and evaluation, SHAP analysis, figures) in a Google Colab notebook, and wrote this paper.
 Notebook, paper and slides are available at \url{https://github.com/MirkodeCillis/MLDM2526_DASS42}.
 
 \section{Proposed Method}
@@ -84,13 +84,15 @@ Categories under 1\% of the rows (three religions, three races) were merged into
 The result has 79 features: 42 items, 10 TIPI items, age, education, urbanicity and the dummy variables.
 
 \subsection{Labels and class imbalance}
-For each respondent, the subscale scores are the sums of its 14 items (item assignment from the DASS handbook) and are mapped to five levels with the standard thresholds~\cite{lovibond}, as shown in Table~\ref{tab:dass_scoring}.
+For each respondent, the subscale scores are the sums of its 14 items (item assignment from the DASS handbook) and are mapped to five levels with the standard thresholds~\cite{lovibond}, as shown in Table~\ref{tab:dass_scoring}. The list of items per scale is in Table~\ref{tab:dass_items}.
+The scores are kept outside the feature matrix, so there is no target leakage beyond the one inherent to the labelling rule.
+Classes are imbalanced: extremely severe is the largest class for depression and anxiety (33.5\% and 34.8\%), normal for stress (29.9\%), and mild is the smallest (7--13\%).
+Imbalance is handled with class weights in the loss (``balanced'' weights computed on the training set only).
+
 \begin{table}[!t]
 \centering
 \caption{DASS-42 score thresholds for the five severity levels of each scale.}
 \label{tab:dass_scoring}
-\footnotesize
-\setlength{\tabcolsep}{3.5pt}
 \begin{tabular}{l cc cc cc}
 \hline
  & Depression & Anxiety & Stress\\
@@ -103,9 +105,21 @@ Extremely Severe  & 28+ & 20+ & 34+\\
 \hline
 \end{tabular}
 \end{table}
-The scores are kept outside the feature matrix, so there is no target leakage beyond the one inherent to the labelling rule.
-Classes are imbalanced: extremely severe is the largest class for depression and anxiety (33.5\% and 34.8\%), normal for stress (29.9\%), and mild is the smallest (7--13\%).
-Imbalance is handled with class weights in the loss (``balanced'' weights computed on the training set only).
+
+\begin{table}[!t]
+\centering
+\caption{DASS-42 items for each scale.}
+\label{tab:dass_items}
+\begin{tabular}{l cc cc cc}
+\hline
+ & Items\\
+\hline
+Depression  & 3, 5, 10, 13, 16, 17, 21, 24, 26, 31, 34, 37, 38, 42\\
+Anxiety  & 2, 4, 7, 9, 15, 19, 20, 23, 25, 28, 30, 36, 40, 41\\
+Stress  & 1, 6, 8, 11, 12, 14, 18, 22, 27, 29, 32, 33, 35, 39\\
+\hline
+\end{tabular}
+\end{table}
 
 \subsection{Model}
 The classifier is a feed-forward network in PyTorch~\cite{torch}.
@@ -124,7 +138,7 @@ Baselines (RF, DT, NB, KNN, SVM) were \emph{not} recomputed: we report the figur
 The data are split 65/35 with stratification on the combination of the three labels: 22,478 training and 12,105 test respondents.
 Features are standardized with a scaler fitted on training data only (within each fold in cross-validation).
 Five-fold stratified cross-validation on the training set (stratified on the anxiety label, since some label combinations have fewer than five respondents) gives mean and standard deviation of each metric.
-The final model is trained once on the training set (seed 42), with 10\% of it held out for early stopping, and evaluated once on the test set.
+The final model is trained once on the training set, with 10\% of it held out for early stopping, and evaluated once on the test set.
 Training settings (up to 200 epochs, learning rate $3\cdot10^{-3}$, batch size 512, patience 10, minimum improvement $10^{-3}$) were adjusted after a first exploratory run; reported scores are therefore not from a pre-fixed configuration.
 Metrics are accuracy, macro-F1 and weighted-F1; the latter is the F1 average used in~\cite{shams} and is the one compared with the baselines.
 
@@ -177,7 +191,7 @@ These differences are at most one percentage point, come from a single run, and 
 
 \begin{table}[!t]
 \centering
-\caption{Test accuracy and weighted F1 (\%). Baselines are taken from Table~3 of~\cite{shams} (not recomputed; different pipeline and split). ANN: single run, 12,105 test respondents. Best of A and the baselines in bold.}
+\caption{Test accuracy and weighted F1 (\%). Baselines are taken from Table~3 of~\cite{shams} (not recomputed; different pipeline and split). Best of A and the baselines in bold.}
 \label{tab:baselines}
 \footnotesize
 \setlength{\tabcolsep}{3.5pt}
@@ -244,7 +258,7 @@ Adding personality and demographic variables brings no consistent gain, TIPI var
 
 \textbf{Limitations.}
 Baselines are copied from the reference paper and not recomputed; ANN results come from a single test run with training settings adjusted after a first run; SHAP shares describe model reliance, not causality, and use a 3,000-row subsample; the dataset is a self-selected online sample, with a strong imbalance on religion.
-\textbf{Future work} includes recomputing the baselines on the same split, repeating the test over several seeds, testing robustness when items are missing (where the exact scoring rule cannot be applied), and a fairness analysis by gender and age.
+\textbf{Future work} includes recomputing the baselines on the same split, repeating the test over several seeds, testing robustness when items are missing (where the exact scoring rule cannot be applied).
 
 \begin{thebibliography}{10}
 
