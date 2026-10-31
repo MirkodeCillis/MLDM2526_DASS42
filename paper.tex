@@ -15,6 +15,15 @@
 \usepackage{amsmath}
 \usepackage{url}
 \usepackage{xcolor}
+\usepackage{fontspec}
+\usepackage{dblfloatfix}   % permette figure* anche in fondo pagina ([!b])
+\usepackage{placeins}      % \FloatBarrier
+\renewcommand{\topfraction}{0.95}
+\renewcommand{\bottomfraction}{0.95}
+\renewcommand{\textfraction}{0.05}
+\renewcommand{\floatpagefraction}{0.8}
+\renewcommand{\dblfloatpagefraction}{0.8}
+\renewcommand{\dbltopfraction}{0.95}
 
 % visible placeholder for data still to be filled in
 \newcommand{\todo}[1]{\textcolor{red}{[#1]}}
@@ -48,7 +57,6 @@ Depression, anxiety and stress are among the most common mental health problems,
 The Depression Anxiety Stress Scales (DASS-42)~\cite{lovibond} contain 42 items rated from 0 to 3, 14 for each subscale; the sum of each subscale is mapped by fixed thresholds to five severity levels (normal, mild, moderate, severe, extremely severe).
 A public dataset of about 40,000 online responses~\cite{kaggle} has become a common benchmark.
 ShamsEldin et al.~\cite{shams} compared decision tree (DT), random forest (RF), naive Bayes (NB), k-nearest neighbours (KNN) and support vector machine (SVM) classifiers on it and found SVM the best, with 99.3\%, 98.9\% and 98.8\% accuracy on depression, anxiety and stress; they left deep learning as future work.
-Srinath et al.~\cite{srinath} report a similar level (about 98\%) with logistic regression.
 
 A property of this benchmark shapes the whole study: the severity labels are computed from the same 42 items given as input.
 The task is therefore not to diagnose, but to recover a known additive scoring rule, and very high accuracy is expected.
@@ -63,7 +71,7 @@ The contributions are: (i) a multi-head ANN with class-weighted loss, evaluated 
 
 \textbf{Group organization.}
 The project was carried out individually (the course allows groups of at most two). The author designed and implemented the whole pipeline (data cleaning and labelling, ANN training and evaluation, SHAP analysis, figures) in a Google Colab notebook, and wrote this paper.
-Notebook, paper and slides are available at \todo{GitHub repository URL}.
+Notebook, paper and slides are available at \url{https://github.com/MirkodeCillis/MLDM2526_DASS42}.
 
 \section{Proposed Method}
 \subsection{Data and preprocessing}
@@ -76,10 +84,28 @@ Categories under 1\% of the rows (three religions, three races) were merged into
 The result has 79 features: 42 items, 10 TIPI items, age, education, urbanicity and the dummy variables.
 
 \subsection{Labels and class imbalance}
-For each respondent, the subscale scores are the sums of its 14 items (item assignment from the DASS handbook) and are mapped to five levels with the standard thresholds~\cite{lovibond}; for depression: 0--9 normal, 10--13 mild, 14--20 moderate, 21--27 severe, 28+ extremely severe.
+For each respondent, the subscale scores are the sums of its 14 items (item assignment from the DASS handbook) and are mapped to five levels with the standard thresholds~\cite{lovibond}, as shown in Table~\ref{tab:dass_scoring}.
+\begin{table}[!t]
+\centering
+\caption{DASS-42 score thresholds for the five severity levels of each scale.}
+\label{tab:dass_scoring}
+\footnotesize
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{l cc cc cc}
+\hline
+ & Depression & Anxiety & Stress\\
+\hline
+Normal  & 0-9 & 0-7 & 0-14\\
+Mild  & 10-13 & 8-9 & 15-18\\
+Moderate  & 14-20 & 10-14 & 19-25\\
+Severe  & 21-27 & 15-19 & 26-33\\
+Extremely Severe  & 28+ & 20+ & 34+\\
+\hline
+\end{tabular}
+\end{table}
 The scores are kept outside the feature matrix, so there is no target leakage beyond the one inherent to the labelling rule.
 Classes are imbalanced: extremely severe is the largest class for depression and anxiety (33.5\% and 34.8\%), normal for stress (29.9\%), and mild is the smallest (7--13\%).
-Imbalance is handled with class weights in the loss (``balanced'' weights computed on the training set only), without resampling.
+Imbalance is handled with class weights in the loss (``balanced'' weights computed on the training set only).
 
 \subsection{Model}
 The classifier is a feed-forward network in PyTorch~\cite{torch}.
@@ -101,6 +127,34 @@ Five-fold stratified cross-validation on the training set (stratified on the anx
 The final model is trained once on the training set (seed 42), with 10\% of it held out for early stopping, and evaluated once on the test set.
 Training settings (up to 200 epochs, learning rate $3\cdot10^{-3}$, batch size 512, patience 10, minimum improvement $10^{-3}$) were adjusted after a first exploratory run; reported scores are therefore not from a pre-fixed configuration.
 Metrics are accuracy, macro-F1 and weighted-F1; the latter is the F1 average used in~\cite{shams} and is the one compared with the baselines.
+
+\begin{figure*}[!tb]
+\centering
+\includegraphics[width=0.8\textwidth]{figures/fig1_learning_curves}
+\caption{Training and validation loss (sum of the three class-weighted cross-entropies) per epoch for the final models of Experiments A and B, on a logarithmic axis. The dashed line marks the epoch of minimum validation loss, where early stopping restores the weights.}
+\label{fig:curves}
+\end{figure*}
+
+\begin{figure*}[!tb]
+\centering
+\includegraphics[width=0.7\textwidth]{figures/fig2_confusion}
+\caption{Test-set confusion matrices (12,105 respondents): experiments in rows, scales in columns. Cells show counts, colour the row-normalised proportion. N, Mi, Mo, Se, ES: normal, mild, moderate, severe, extremely severe. Errors occur only between adjacent classes.}
+\label{fig:conf}
+\end{figure*}
+
+\begin{figure*}[!tb]
+\centering
+\includegraphics[width=0.8\textwidth]{figures/fig4_top15_B}
+\caption{The 15 most important variables per scale in Experiment B, ranked by share of mean $|$SHAP$|$, with dummies of nominal variables aggregated per original variable. Bars are coloured by variable group; each panel has its own x-axis.}
+\label{fig:top15}
+\end{figure*}
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.85\columnwidth]{figures/fig6b_beeswarm_D}
+\caption{SHAP beeswarm for the depression head of Experiment B, class extremely severe, 3,000 test respondents. Each dot is a respondent coloured by feature value (grey: nominal). Depression items act monotonically: high answers raise the class logit, low answers lower it, as in an additive score.}
+\label{fig:beeswarm}
+\end{figure}
 
 \subsection{Interpretability with SHAP}
 We explain each scale with SHAP DeepExplainer~\cite{shap}, wrapping each head as a separate model that outputs its five logits.
@@ -146,19 +200,6 @@ ANN (B)$^\dagger$ & 99.46 & 99.46 & 99.88 & 99.88 & 99.58 & 99.58\\
 \end{table}
 
 \subsection{Error structure and items vs.\ all features}
-\begin{figure*}[!t]
-\centering
-\includegraphics[width=0.92\textwidth]{figures/fig1_learning_curves}
-\caption{Training and validation loss (sum of the three class-weighted cross-entropies) per epoch for the final models of Experiments A and B, on a logarithmic axis. The dashed line marks the epoch of minimum validation loss, where early stopping restores the weights.}
-\label{fig:curves}
-\end{figure*}
-
-\begin{figure*}[!t]
-\centering
-\includegraphics[width=0.92\textwidth]{figures/fig2_confusion}
-\caption{Test-set confusion matrices (12,105 respondents): experiments in rows, scales in columns. Cells show counts, colour the row-normalised proportion. N, Mi, Mo, Se, ES: normal, mild, moderate, severe, extremely severe. Errors occur only between adjacent classes.}
-\label{fig:conf}
-\end{figure*}
 
 Every misclassification occurs between adjacent severity levels (Fig.~\ref{fig:conf}), next to the score thresholds that define the labels.
 With items only, depression has 121 normal$\to$mild, 43 extremely severe$\to$severe and 3 mild$\to$moderate errors (167 of 12,105), anxiety has none, and stress has 37 (16 severe$\to$extremely severe, 20 the reverse, 1 moderate$\to$mild).
@@ -182,20 +223,6 @@ Per variable, an own item weighs 5.5--6.0\%, a demographic variable about 0.9\%,
 TIPI variables never reach the top five non-own variables of any scale.
 Fig.~\ref{fig:top15} ranks the 15 most important variables per scale in Experiment B: own-scale items dominate the ranking, and religion is the leading non-own variable.
 
-\begin{figure*}[!t]
-\centering
-\includegraphics[width=0.92\textwidth]{figures/fig4_top15_B}
-\caption{The 15 most important variables per scale in Experiment B, ranked by share of mean $|$SHAP$|$, with dummies of nominal variables aggregated per original variable. Bars are coloured by variable group; each panel has its own x-axis.}
-\label{fig:top15}
-\end{figure*}
-
-\begin{figure}[!t]
-\centering
-\includegraphics[width=0.9\columnwidth]{figures/fig6_beeswarm_D}
-\caption{SHAP beeswarm for the depression head of Experiment B, class extremely severe, 3,000 test respondents. Each dot is a respondent coloured by feature value (grey: nominal). Depression items act monotonically: high answers raise the class logit, low answers lower it, as in an additive score.}
-\label{fig:beeswarm}
-\end{figure}
-
 The beeswarm in Fig.~\ref{fig:beeswarm} shows that the depression items contribute with similar magnitude and in an ordered way, so the network has recovered the additive scoring rule.
 Among the non-item variables of Experiment B, \emph{religion} is the most important on all scales (3.09\%, 3.34\%, 2.50\%), followed by race, marital status and gender (about 0.6--1.8\%).
 Its per-class SHAP values on depression are lopsided: Muslim respondents (58\% of the sample, $n=1{,}739$ in the subsample) are pushed away from ``normal'' ($-3.57$) and towards severe ($+1.54$), while most other groups are pushed towards it (e.g.\ agnostic $+8.29$, atheist $+3.68$), and Catholic respondents are close to neutral ($+0.33$) (Fig.~\ref{fig:religion}).
@@ -204,7 +231,7 @@ It signals that the network exploits a demographic correlation present in this s
 
 \begin{figure}[!t]
 \centering
-\includegraphics[width=0.95\columnwidth]{figures/fig5_religion_heatmap}
+\includegraphics[width=0.85\columnwidth]{figures/fig5_religion_heatmap}
 \caption{Mean SHAP of religion on each severity class of the depression head, Experiment B, for religions with at least 100 test samples (share of the subsample in brackets). Values are centred logits: red pushes towards the class, blue away. Measured against a Muslim-dominated background.}
 \label{fig:religion}
 \end{figure}
@@ -244,9 +271,6 @@ A.~Paszke \emph{et al.}, ``PyTorch: An imperative style, high-performance deep l
 
 \bibitem{adam}
 D.~P. Kingma and J.~Ba, ``Adam: A method for stochastic optimization,'' in \emph{Proc. ICLR}, 2015.
-
-\bibitem{srinath}
-K.~Srinath \emph{et al.}, ``Prediction of depression, anxiety and stress levels using DASS-42,'' in \emph{Proc. Int. Conf. for Convergence in Technology}, IEEE, 2022.
 
 \end{thebibliography}
 
